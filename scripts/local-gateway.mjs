@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,13 +21,54 @@ function expect(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function validateState(repoRoot) {
+  const state = path.join(repoRoot, '.local');
+  const incomplete = 'Local state is incomplete or invalid; preserve it and investigate before continuing.';
+  const hasFiles = requiredFiles.every((file) => existsSync(path.join(state, file)) && statSync(path.join(state, file)).isFile() && statSync(path.join(state, file)).size > 0);
+  const hasDirectories = requiredDirectories.every((directory) => existsSync(path.join(state, directory)) && statSync(path.join(state, directory)).isDirectory());
+  expect(hasFiles && hasDirectories, incomplete);
+  expect((statSync(state).mode & 0o077) === 0, 'The .local directory must be private (mode 700).');
+  const read = (name) => readFileSync(path.join(state, name), 'utf8').trim();
+  const keys = { management: read('management-key'), client: read('client-key') };
+  expect(/^[a-f0-9]{64}$/.test(keys.management) && /^[a-f0-9]{64}$/.test(keys.client) && keys.management !== keys.client, incomplete);
+  const env = (name) => {
+    const values = {};
+    for (const line of read(name).split('\n').filter((line) => line.trim() && !line.trim().startsWith('#'))) {
+      const match = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+      expect(match && !Object.hasOwn(values, match[1]), incomplete);
+      values[match[1]] = match[2];
+    }
+    return values;
+  };
+  const composeEnv = env('compose.env');
+  const cpaEnv = env('cpa.env');
+  const omcEnv = env('omc.env');
+  expect(/^\d+$/.test(composeEnv.LOCAL_UID ?? '') && /^\d+$/.test(composeEnv.LOCAL_GID ?? ''), incomplete);
+  expect(cpaEnv.MANAGEMENT_PASSWORD === keys.management && omcEnv.OMCPA_CPA_MANAGEMENT_KEY === keys.management && /^[a-f0-9]{64}$/.test(omcEnv.OMCPA_MASTER_KEY ?? ''), incomplete);
+  expect(/^config-version:\s*8\s*$/m.test(read('cpa/config.yaml')), incomplete);
+  const db = path.join(state, 'omc/oh-my-cpa.db');
+  const hasDatabase = existsSync(db) && statSync(db).isFile() && statSync(db).size > 0;
+  const marker = read('initialized');
+  let initialized;
+  if (marker === 'Local gateway state initialized.') {
+    // Legacy installations have no persisted database observation; adopt only existing data.
+    expect(hasDatabase, 'Legacy local state has no panel database; preserve it and investigate before continuing.');
+    initialized = { version: 1, panelInitialized: true };
+  } else {
+    try { initialized = JSON.parse(marker); } catch { throw new Error(incomplete); }
+    expect(initialized?.version === 1 && typeof initialized.panelInitialized === 'boolean', incomplete);
+  }
+  expect(!initialized.panelInitialized || hasDatabase, 'Previously initialized panel database is missing or invalid; restore the private state before continuing.');
+  return { state, keys, hasDatabase, initialized };
+}
+
 export function setupState(repoRoot) {
   const state = path.join(repoRoot, '.local');
   if (existsSync(state)) {
-    const hasFiles = requiredFiles.every((file) => existsSync(path.join(state, file)));
-    const hasDirectories = requiredDirectories.every((directory) => existsSync(path.join(state, directory)) && statSync(path.join(state, directory)).isDirectory());
-    expect(hasFiles && hasDirectories, 'Local state is incomplete; preserve it and investigate before continuing.');
-    expect((statSync(state).mode & 0o077) === 0, 'The .local directory must be private (mode 700).');
+    const validated = validateState(repoRoot);
+    if (validated.hasDatabase) {
+      writeFileSync(path.join(state, 'initialized'), JSON.stringify({ version: 1, panelInitialized: true }) + '\n', { mode: 0o600 });
+    }
     return { created: false, state };
   }
   expect(typeof process.getuid === 'function' && process.getuid() !== 0, 'Run setup as a non-root Unix user.');
@@ -65,26 +106,21 @@ plugins:
   enabled: false
   dir: /CLIProxyAPI/plugins
 `);
-  put('initialized', 'Local gateway state initialized.\n');
+  put('initialized', JSON.stringify({ version: 1, panelInitialized: false }) + '\n');
   return { created: true, state };
 }
 
 function readKeys(repoRoot = root) {
-  expect(requiredFiles.every((file) => existsSync(path.join(repoRoot, '.local', file))), 'Local state is missing or incomplete; run setup or investigate the existing state.');
-  const read = (name) => readFileSync(path.join(repoRoot, '.local', name), 'utf8').trim();
-  const keys = { management: read('management-key'), client: read('client-key') };
-  expect(/^[a-f0-9]{64}$/.test(keys.management) && /^[a-f0-9]{64}$/.test(keys.client), 'Local key files are invalid.');
-  return keys;
+  return validateState(repoRoot).keys;
 }
 
-function docker(args, { allowFailure = false } = {}) {
+function docker(args) {
   const result = spawnSync('docker', args, {
     encoding: 'utf8',
     env: { ...process.env, LOCAL_UID: String(process.getuid()), LOCAL_GID: String(process.getgid()) },
     maxBuffer: 1024 * 1024,
   });
   if (result.error || result.status !== 0) {
-    if (allowFailure) return null;
     throw new Error(`Docker command failed (${result.error?.code ?? result.status}); inspect the local Docker service and project state.`);
   }
   return result.stdout.trim();
@@ -95,11 +131,21 @@ function compose(args) {
 }
 
 function inspect(service) {
-  const template = '{"id":{{json .Id}},"name":{{json .Name}},"image":{{json .Config.Image}},"image_id":{{json .Image}},"running":{{json .State.Running}},"health":{{json .State.Health.Status}},"ports":{{json .NetworkSettings.Ports}},"mounts":{{json .Mounts}},"restart":{{json .HostConfig.RestartPolicy.Name}},"logging":{{json .HostConfig.LogConfig}},"readonly":{{json .HostConfig.ReadonlyRootfs}},"user":{{json .Config.User}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"service":{{json (index .Config.Labels "com.docker.compose.service")}}}';
-  const value = docker(['inspect', '--format', template, `${project}-${service}-1`], { allowFailure: true });
-  if (value === null) return null;
-  const info = JSON.parse(value);
+  const name = `${project}-${service}-1`;
+  const names = docker(['ps', '-a', '--filter', `name=^/${name}$`, '--format', '{{.Names}}']).split('\n').filter(Boolean);
+  if (!names.includes(name)) return null;
+  const template = '{"id":{{json .Id}},"name":{{json .Name}},"image":{{json .Config.Image}},"image_id":{{json .Image}},"running":{{json .State.Running}},"health":{{if .State.Health}}{{json .State.Health.Status}}{{else}}null{{end}},"ports":{{json .NetworkSettings.Ports}},"mounts":{{json .Mounts}},"restart":{{json .HostConfig.RestartPolicy.Name}},"logging":{{json .HostConfig.LogConfig}},"readonly":{{json .HostConfig.ReadonlyRootfs}},"user":{{json .Config.User}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},"working_dir":{{json (index .Config.Labels "com.docker.compose.project.working_dir")}},"config_files":{{json (index .Config.Labels "com.docker.compose.project.config_files")}}}';
+  const info = JSON.parse(docker(['inspect', '--format', template, name]));
   expect(info.project === project && info.service === service, `Container name for ${service} is owned by another project.`);
+  const repo = realpathSync(root);
+  const composeFile = path.join(repo, 'deploy/local/compose.yml');
+  expect(info.working_dir === path.dirname(composeFile) && info.config_files === composeFile, `${service} belongs to another checkout; no Docker mutation was performed.`);
+  const expectedMounts = service === 'cpa'
+    ? [['cpa/config.yaml', '/CLIProxyAPI/config.yaml'], ['cpa/auth', '/root/.cli-proxy-api'], ['cpa/logs', '/CLIProxyAPI/logs'], ['cpa/plugins', '/CLIProxyAPI/plugins']]
+    : [['omc', '/data']];
+  for (const [source, destination] of expectedMounts) {
+    expect(info.mounts?.some((mount) => mount.Type === 'bind' && mount.Source === path.join(repo, '.local', source) && mount.Destination === destination), `${service} has foreign state mounts; no Docker mutation was performed.`);
+  }
   return info;
 }
 
@@ -113,15 +159,20 @@ async function assertPortFree(port) {
 
 async function start() {
   const initialized = setupState(root);
+  const containers = inspectContainers();
   for (const [service, spec] of Object.entries(services)) {
-    const info = inspect(service);
+    const info = containers[service];
     if (!info?.running) await assertPortFree(spec.port);
   }
   compose(['up', '-d', '--wait', '--wait-timeout', '180']);
+  expect(validateState(root).hasDatabase, 'Panel started without its persistent database; preserve state and investigate.');
+  setupState(root);
   return { state_created: initialized.created, containers: inspectContainers() };
 }
 
 function inspectContainers() {
+  const names = docker(['ps', '-a', '--filter', `label=com.docker.compose.project=${project}`, '--format', '{{.Names}}']).split('\n').filter(Boolean);
+  expect(names.every((name) => Object.keys(services).some((service) => name === `${project}-${service}-1`)), 'The project contains unknown containers; no Docker mutation was performed.');
   return Object.fromEntries(Object.keys(services).map((service) => [service, inspect(service)]));
 }
 
@@ -205,7 +256,7 @@ const tools = [{ type: 'function', function: { name: 'add_numbers', description:
 
 export async function modelCheck({ api = apiBase, client, model }) {
   expect(typeof model === 'string' && model.trim().length > 0 && model.length <= 200, 'Set MODEL to a configured model name.');
-  const messages = [{ role: 'user', content: 'Call add_numbers with a=17 and b=25, then tell me the result.' }];
+  const messages = [{ role: 'user', content: 'Call add_numbers with a=17 and b=25, then reply with only the numeric result, without any other text.' }];
   const send = async (payload) => {
     const response = await request(`${api}/v1/chat/completions`, { method: 'POST', headers: { Authorization: `Bearer ${client}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     expect(response.status === 200, `Model request failed with HTTP ${response.status}.`);
@@ -223,7 +274,7 @@ export async function modelCheck({ api = apiBase, client, model }) {
   const second = await send({ model, messages: [...messages, assistant, { role: 'tool', tool_call_id: call.id, content: JSON.stringify({ result }) }], tools, tool_choice: 'none' });
   const final = second.choices?.[0]?.message;
   expect(final?.role === 'assistant' && typeof final.content === 'string' && final.content.trim().length > 0 && !final.tool_calls?.length, 'Model did not return a final answer.');
-  expect(/\b42\b/.test(final.content), 'Final answer does not contain the computed result.');
+  expect(final.content.trim() === String(result), 'Final answer must be exactly the computed result.');
   const structured = await send({ model, messages: [{ role: 'user', content: 'Return exactly this JSON object: {"ok":true,"result":42}' }], response_format: { type: 'json_object' } });
   let structuredValue;
   try { structuredValue = JSON.parse(structured.choices?.[0]?.message?.content); } catch { throw new Error('Model did not return valid structured JSON.'); }
@@ -237,13 +288,14 @@ async function main(args) {
   let result;
   if (command === 'setup' && flags.length === 0) result = setupState(root);
   else if (command === 'start' && flags.length === 0) result = await start();
-  else if (command === 'stop' && flags.length === 0) { setupState(root); compose(['stop']); result = { stopped: true }; }
+  else if (command === 'stop' && flags.length === 0) { inspectContainers(); setupState(root); compose(['stop']); result = { stopped: true }; }
   else if (command === 'status' && flags.length === 0) result = { containers: inspectContainers() };
   else if (command === 'check' && flags.length === 0) {
     const containers = inspectContainers();
     validateContainers(containers);
     result = { docker_checks: 'passed', ...(await checkHTTP({ keys: readKeys() })) };
   } else if (command === 'model-check' && flags.length === 1 && flags[0] === '--live') {
+    inspectContainers();
     result = await modelCheck({ client: readKeys().client, model: process.env.MODEL });
   } else throw new Error('Usage: node scripts/local-gateway.mjs setup|start|stop|status|check [--json], or MODEL=<name> node scripts/local-gateway.mjs model-check --live [--json].');
   console.log(JSON.stringify({ ok: true, command, ...result }, null, 2));

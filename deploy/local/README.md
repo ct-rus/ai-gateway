@@ -14,7 +14,13 @@ node scripts/local-gateway.mjs check --json
 
 `start` also runs setup if needed. Repeating setup or start preserves existing
 keys, CPA configuration, providers and panel data; incomplete state is refused
-instead of being regenerated. The ports must be available. The stack uses the
+instead of being regenerated. Setup checks the required files and credentials
+and records when a panel database exists, so losing that database later refuses
+startup. An older installation is adopted only with its database present.
+Container ownership includes the checkout path and its private bind mounts;
+commands from another checkout refuse to operate on the stack. Docker service
+or permission failures are reported as errors rather than absent containers.
+The ports must be available. The stack uses the
 dedicated `10.254.83.0/28` Docker network; a conflicting route or network must
 be resolved before starting it. No existing process or network is removed.
 
@@ -62,7 +68,7 @@ MODEL='your-configured-model-name' node scripts/local-gateway.mjs model-check --
 This sends three chat-completion requests. It requires a single `add_numbers`
 tool call with arguments `17` and `25`, calculates that fixed result locally,
 then sends the tool result with the same tool definitions and `tool_choice`
-set to `none`. It checks that the final answer contains `42`, then requests and
+set to `none`. It requires the final answer to be exactly `42`, then requests and
 validates a separate JSON object using `response_format: json_object`. It does not
 execute model-supplied code or display raw model output. No other command makes
 a model request. The automated script tests use mock HTTP servers and are not

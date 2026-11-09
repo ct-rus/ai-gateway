@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -48,6 +48,108 @@ test('setup refuses a missing runtime directory without recreating it', () => {
   rmSync(path.join(root, '.local/cpa/auth'), { recursive: true });
   assert.throws(() => setupState(root), /incomplete/);
   assert.equal(existsSync(path.join(root, '.local/cpa/auth')), false);
+});
+
+test('setup refuses empty, inconsistent and non-file runtime inputs without replacing them', () => {
+  for (const invalid of ['empty-env', 'wrong-key', 'config-directory']) {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'omc-local-test-'));
+    fixtures.push(root);
+    setupState(root);
+    const key = readFileSync(path.join(root, '.local/management-key'), 'utf8');
+    if (invalid === 'empty-env') writeFileSync(path.join(root, '.local/omc.env'), '');
+    if (invalid === 'wrong-key') writeFileSync(path.join(root, '.local/cpa.env'), 'MANAGEMENT_PASSWORD=wrong\n');
+    if (invalid === 'config-directory') {
+      rmSync(path.join(root, '.local/cpa/config.yaml'));
+      mkdirSync(path.join(root, '.local/cpa/config.yaml'));
+    }
+    assert.throws(() => setupState(root), /incomplete or invalid/);
+    assert.equal(readFileSync(path.join(root, '.local/management-key'), 'utf8'), key);
+  }
+});
+
+test('setup records an observed panel database and refuses its later loss', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'omc-local-test-'));
+  fixtures.push(root);
+  setupState(root);
+  assert.equal(setupState(root).created, false);
+  const database = path.join(root, '.local/omc/oh-my-cpa.db');
+  writeFileSync(database, 'SQLite format 3\0fixture');
+  setupState(root);
+  assert.equal(JSON.parse(readFileSync(path.join(root, '.local/initialized'), 'utf8')).panelInitialized, true);
+  rmSync(database);
+  assert.throws(() => setupState(root), /Previously initialized panel database/);
+  assert.equal(existsSync(database), false);
+});
+
+test('legacy setup adopts an existing database and refuses ambiguous missing data', () => {
+  for (const hasDatabase of [true, false]) {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'omc-local-test-'));
+    fixtures.push(root);
+    setupState(root);
+    writeFileSync(path.join(root, '.local/initialized'), 'Local gateway state initialized.\n');
+    if (hasDatabase) {
+      writeFileSync(path.join(root, '.local/omc/oh-my-cpa.db'), 'SQLite format 3\0fixture');
+      setupState(root);
+      assert.equal(JSON.parse(readFileSync(path.join(root, '.local/initialized'), 'utf8')).panelInitialized, true);
+    } else assert.throws(() => setupState(root), /Legacy local state has no panel database/);
+  }
+});
+
+function dockerFixture(options) {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'omc-docker-test-'));
+  fixtures.push(root);
+  setupState(root);
+  mkdirSync(path.join(root, 'scripts'));
+  mkdirSync(path.join(root, 'bin'));
+  copyFileSync(new URL('./local-gateway.mjs', import.meta.url), path.join(root, 'scripts/local-gateway.mjs'));
+  writeFileSync(path.join(root, 'fixture.json'), JSON.stringify({ root, ...options }));
+  writeFileSync(path.join(root, 'bin/docker'), `#!${process.execPath}
+const fs = require('node:fs');
+const path = require('node:path');
+const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, '../fixture.json'), 'utf8'));
+const args = process.argv.slice(2);
+fs.appendFileSync(path.join(fixture.root, 'commands.jsonl'), JSON.stringify(args) + '\\n');
+if (fixture.failure) process.exit(1);
+const project = 'ct-ai-gateway-local';
+const names = ['cpa', 'oh-my-cpa'].map(service => project + '-' + service + '-1');
+if (args[0] === 'ps') {
+  const filter = args[args.indexOf('--filter') + 1];
+  console.log(fixture.absent ? '' : filter.startsWith('name=') ? names.filter(name => filter === 'name=^/' + name + '$').join('\\n') : names.join('\\n'));
+} else if (args[0] === 'inspect') {
+  const service = args.at(-1) === names[0] ? 'cpa' : 'oh-my-cpa';
+  const owner = fixture.foreign ? '/another/checkout' : fixture.root;
+  const mountRoot = fixture.foreignMounts ? '/another/checkout' : owner;
+  const binds = service === 'cpa' ? [['cpa/config.yaml', '/CLIProxyAPI/config.yaml'], ['cpa/auth', '/root/.cli-proxy-api'], ['cpa/logs', '/CLIProxyAPI/logs'], ['cpa/plugins', '/CLIProxyAPI/plugins']] : [['omc', '/data']];
+  console.log(JSON.stringify({project, service, running:true, working_dir:path.join(owner,'deploy/local'), config_files:path.join(owner,'deploy/local/compose.yml'), mounts:binds.map(([source,destination])=>({Type:'bind',Source:path.join(mountRoot,'.local',source),Destination:destination}))}));
+} else if (args[0] === 'compose') process.exit(99);
+else process.exit(98);
+`, { mode: 0o700 });
+  return {
+    run: (command) => spawnSync(process.execPath, [path.join(root, 'scripts/local-gateway.mjs'), command, '--json'], { encoding: 'utf8', env: { ...process.env, PATH: `${path.join(root, 'bin')}:${process.env.PATH}` } }),
+    commands: () => readFileSync(path.join(root, 'commands.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)),
+  };
+}
+
+test('start, stop, status and check refuse a different checkout before any compose command', () => {
+  for (const command of ['start', 'stop', 'status', 'check']) {
+    for (const options of [{ foreign: true }, { foreignMounts: true }]) {
+      const fixture = dockerFixture(options);
+      const result = fixture.run(command);
+      assert.equal(result.status, 1, command);
+      assert.match(JSON.parse(result.stderr).error, /another checkout|foreign state mounts/);
+      assert.equal(fixture.commands().some((args) => args[0] === 'compose'), false);
+    }
+  }
+});
+
+test('status distinguishes absent containers from Docker daemon or permission errors', () => {
+  const absent = dockerFixture({ absent: true }).run('status');
+  assert.equal(absent.status, 0);
+  assert.deepEqual(JSON.parse(absent.stdout).containers, { cpa: null, 'oh-my-cpa': null });
+  const unavailable = dockerFixture({ failure: true }).run('status');
+  assert.equal(unavailable.status, 1);
+  assert.equal(JSON.parse(unavailable.stderr).ok, false);
+  assert.match(JSON.parse(unavailable.stderr).error, /Docker command failed/);
 });
 
 async function server(handler) {
@@ -120,7 +222,7 @@ test('model check sends the same tools twice and validates a separate structured
     calls.push(JSON.parse(body));
     if (calls.length === 1) return send(response, 200, { choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'add_numbers', arguments: '{"a":17,"b":25}' } }] } }] });
     if (calls.length === 3) return send(response, 200, { choices: [{ message: { role: 'assistant', content: structuredContent } }] });
-    send(response, 200, { choices: [{ message: { role: 'assistant', content: 'The result is 42.' } }] });
+    send(response, 200, { choices: [{ message: { role: 'assistant', content: '42' } }] });
   });
   try {
     const result = await modelCheck({ api: fixture.url, client: 'client-fixture', model: 'model-fixture' });
@@ -150,6 +252,22 @@ test('model check rejects unexpected model tool arguments before any second requ
   try {
     await assert.rejects(modelCheck({ api: fixture.url, client: 'client-fixture', model: 'model-fixture' }), /unexpected tool arguments/);
     assert.equal(calls, 1);
+  } finally { await fixture.close(); }
+});
+
+test('model check rejects a contradictory final answer containing the correct number', async () => {
+  let calls = 0;
+  const fixture = await server(async (request, response) => {
+    for await (const chunk of request) void chunk;
+    calls += 1;
+    const message = calls === 1
+      ? { role: 'assistant', tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'add_numbers', arguments: '{"a":17,"b":25}' } }] }
+      : { role: 'assistant', content: '42 is incorrect; the result is 43.' };
+    send(response, 200, { choices: [{ message }] });
+  });
+  try {
+    await assert.rejects(modelCheck({ api: fixture.url, client: 'client-fixture', model: 'model-fixture' }), /exactly the computed result/);
+    assert.equal(calls, 2);
   } finally { await fixture.close(); }
 });
 
