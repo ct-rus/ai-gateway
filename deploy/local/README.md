@@ -2,10 +2,12 @@
 
 This local-only installation runs CPA v8.0.62 and Oh My CPA v0.3.26, each
 pinned by release tag and image digest in `compose.yml`. Docker Engine, Docker
-Compose, Node.js 22 or newer and a non-root Unix user are required; the scripts
-use only Node's built-in modules. Commands below run from the repository root.
+Compose, the repository's pinned Node/pnpm toolchain and a non-root Unix user
+are required. The JS scripts reuse the existing `yaml` package to validate CPA
+settings. Commands below run from the repository root.
 
 ```sh
+pnpm install --frozen-lockfile
 node scripts/local-gateway.mjs setup --json
 node scripts/local-gateway.mjs start --json
 node scripts/local-gateway.mjs status --json
@@ -16,8 +18,10 @@ node scripts/local-gateway.mjs check --json
 keys, CPA configuration, providers and panel data; incomplete state is refused
 instead of being regenerated. Setup checks the required files and credentials
 and records when a panel database exists, so losing that database later refuses
-startup. An older installation is adopted only with its database present.
-Container ownership includes the checkout path and its private bind mounts;
+startup. A startup attempt is recorded before Compose runs, because a failed wait
+may already have created data. A retry with a missing database requires operator
+investigation or restoration. An older installation is adopted only with its database present.
+Container ownership includes the checkout path and the exact private bind mounts;
 commands from another checkout refuse to operate on the stack. Docker service
 or permission failures are reported as errors rather than absent containers.
 The ports must be available. The stack uses the
@@ -105,7 +109,9 @@ node scripts/local-gateway.mjs start --json
 ```
 
 The archive contains credentials and encryption material; protect it as a
-secret. To restore a cold backup, stop the stack, preserve the current state,
+secret. `stop` checks container ownership without requiring a healthy database,
+so it remains available when restoring lost panel data. To restore a cold backup,
+stop the stack, preserve the current state,
 restore `.local` in the repository with its original ownership and permissions,
 then start and run `check`. The panel can also export an encrypted SQLite backup
 from **System Information → Database → Manage backups**, but that export does

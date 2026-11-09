@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileS
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseDocument } from 'yaml';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const project = 'ct-ai-gateway-local';
@@ -45,7 +46,15 @@ function validateState(repoRoot) {
   const omcEnv = env('omc.env');
   expect(/^\d+$/.test(composeEnv.LOCAL_UID ?? '') && /^\d+$/.test(composeEnv.LOCAL_GID ?? ''), incomplete);
   expect(cpaEnv.MANAGEMENT_PASSWORD === keys.management && omcEnv.OMCPA_CPA_MANAGEMENT_KEY === keys.management && /^[a-f0-9]{64}$/.test(omcEnv.OMCPA_MASTER_KEY ?? ''), incomplete);
-  expect(/^config-version:\s*8\s*$/m.test(read('cpa/config.yaml')), incomplete);
+  let config;
+  try {
+    const document = parseDocument(read('cpa/config.yaml'));
+    if (document.errors.length) throw new Error(incomplete);
+    config = document.toJS();
+  } catch { throw new Error(incomplete); }
+  expect(config?.['config-version'] === 8 && config.server?.port === 8317 && ['', '0.0.0.0'].includes(config.server?.host), incomplete);
+  expect(config.management?.['allow-remote'] === true && config.oauth?.['auth-dir'] === '/root/.cli-proxy-api', incomplete);
+  expect(Array.isArray(config.access?.['api-keys']) && config.access['api-keys'].includes(keys.client) && config.access['api-keys'].every((key) => typeof key === 'string' && key.length > 0), incomplete);
   const db = path.join(state, 'omc/oh-my-cpa.db');
   const hasDatabase = existsSync(db) && statSync(db).isFile() && statSync(db).size > 0;
   const marker = read('initialized');
@@ -56,9 +65,9 @@ function validateState(repoRoot) {
     initialized = { version: 1, panelInitialized: true };
   } else {
     try { initialized = JSON.parse(marker); } catch { throw new Error(incomplete); }
-    expect(initialized?.version === 1 && typeof initialized.panelInitialized === 'boolean', incomplete);
+    expect(initialized?.version === 1 && typeof initialized.panelInitialized === 'boolean' && (initialized.startAttempted === undefined || typeof initialized.startAttempted === 'boolean'), incomplete);
   }
-  expect(!initialized.panelInitialized || hasDatabase, 'Previously initialized panel database is missing or invalid; restore the private state before continuing.');
+  expect((!initialized.panelInitialized && !initialized.startAttempted) || hasDatabase, 'Previously initialized or attempted panel database is missing or invalid; restore or investigate the private state before continuing.');
   return { state, keys, hasDatabase, initialized };
 }
 
@@ -143,6 +152,7 @@ function inspect(service) {
   const expectedMounts = service === 'cpa'
     ? [['cpa/config.yaml', '/CLIProxyAPI/config.yaml'], ['cpa/auth', '/root/.cli-proxy-api'], ['cpa/logs', '/CLIProxyAPI/logs'], ['cpa/plugins', '/CLIProxyAPI/plugins']]
     : [['omc', '/data']];
+  expect(info.mounts?.length === expectedMounts.length, `${service} has unexpected state mounts; no Docker mutation was performed.`);
   for (const [source, destination] of expectedMounts) {
     expect(info.mounts?.some((mount) => mount.Type === 'bind' && mount.Source === path.join(repo, '.local', source) && mount.Destination === destination), `${service} has foreign state mounts; no Docker mutation was performed.`);
   }
@@ -164,6 +174,9 @@ async function start() {
     const info = containers[service];
     if (!info?.running) await assertPortFree(spec.port);
   }
+  // A failing Compose wait may already have created persistent data.
+  const previous = validateState(root);
+  writeFileSync(path.join(previous.state, 'initialized'), JSON.stringify({ ...previous.initialized, startAttempted: true }) + '\n', { mode: 0o600 });
   compose(['up', '-d', '--wait', '--wait-timeout', '180']);
   expect(validateState(root).hasDatabase, 'Panel started without its persistent database; preserve state and investigate.');
   setupState(root);
@@ -288,7 +301,7 @@ async function main(args) {
   let result;
   if (command === 'setup' && flags.length === 0) result = setupState(root);
   else if (command === 'start' && flags.length === 0) result = await start();
-  else if (command === 'stop' && flags.length === 0) { inspectContainers(); setupState(root); compose(['stop']); result = { stopped: true }; }
+  else if (command === 'stop' && flags.length === 0) { inspectContainers(); compose(['stop']); result = { stopped: true }; }
   else if (command === 'status' && flags.length === 0) result = { containers: inspectContainers() };
   else if (command === 'check' && flags.length === 0) {
     const containers = inspectContainers();

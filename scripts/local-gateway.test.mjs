@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { checkHTTP, modelCheck, setupState } from './local-gateway.mjs';
 
 const fixtures = [];
@@ -77,7 +78,7 @@ test('setup records an observed panel database and refuses its later loss', () =
   setupState(root);
   assert.equal(JSON.parse(readFileSync(path.join(root, '.local/initialized'), 'utf8')).panelInitialized, true);
   rmSync(database);
-  assert.throws(() => setupState(root), /Previously initialized panel database/);
+  assert.throws(() => setupState(root), /Previously initialized or attempted panel database/);
   assert.equal(existsSync(database), false);
 });
 
@@ -95,12 +96,28 @@ test('legacy setup adopts an existing database and refuses ambiguous missing dat
   }
 });
 
+test('setup rejects incomplete or malformed CPA YAML and a mismatched client key', () => {
+  for (const invalid of ['version-only', 'malformed', 'wrong-client']) {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'omc-local-test-'));
+    fixtures.push(root);
+    setupState(root);
+    const config = path.join(root, '.local/cpa/config.yaml');
+    const original = readFileSync(config, 'utf8');
+    const client = readFileSync(path.join(root, '.local/client-key'), 'utf8').trim();
+    writeFileSync(config, invalid === 'version-only' ? 'config-version: 8\n' : invalid === 'malformed' ? `${original}\nbroken: [\n` : original.replace(client, 'wrong-client'));
+    assert.throws(() => setupState(root), /incomplete or invalid/);
+    assert.equal(readFileSync(path.join(root, '.local/client-key'), 'utf8').trim(), client);
+  }
+});
+
 function dockerFixture(options) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'omc-docker-test-'));
   fixtures.push(root);
   setupState(root);
   mkdirSync(path.join(root, 'scripts'));
   mkdirSync(path.join(root, 'bin'));
+  mkdirSync(path.join(root, 'node_modules'));
+  symlinkSync(path.dirname(path.dirname(fileURLToPath(import.meta.resolve('yaml')))), path.join(root, 'node_modules/yaml'), 'dir');
   copyFileSync(new URL('./local-gateway.mjs', import.meta.url), path.join(root, 'scripts/local-gateway.mjs'));
   writeFileSync(path.join(root, 'fixture.json'), JSON.stringify({ root, ...options }));
   writeFileSync(path.join(root, 'bin/docker'), `#!${process.execPath}
@@ -120,11 +137,17 @@ if (args[0] === 'ps') {
   const owner = fixture.foreign ? '/another/checkout' : fixture.root;
   const mountRoot = fixture.foreignMounts ? '/another/checkout' : owner;
   const binds = service === 'cpa' ? [['cpa/config.yaml', '/CLIProxyAPI/config.yaml'], ['cpa/auth', '/root/.cli-proxy-api'], ['cpa/logs', '/CLIProxyAPI/logs'], ['cpa/plugins', '/CLIProxyAPI/plugins']] : [['omc', '/data']];
-  console.log(JSON.stringify({project, service, running:true, working_dir:path.join(owner,'deploy/local'), config_files:path.join(owner,'deploy/local/compose.yml'), mounts:binds.map(([source,destination])=>({Type:'bind',Source:path.join(mountRoot,'.local',source),Destination:destination}))}));
-} else if (args[0] === 'compose') process.exit(99);
+  const mounts = binds.map(([source,destination])=>({Type:'bind',Source:path.join(mountRoot,'.local',source),Destination:destination}));
+  if (fixture.overlap && service === 'oh-my-cpa') mounts.push({Type:'bind',Source:'/another/checkout/omc.db',Destination:'/data/oh-my-cpa.db'});
+  console.log(JSON.stringify({project, service, running:true, working_dir:path.join(owner,'deploy/local'), config_files:path.join(owner,'deploy/local/compose.yml'), mounts}));
+} else if (args[0] === 'compose') {
+  if (fixture.createDatabase) fs.writeFileSync(path.join(fixture.root,'.local/omc/oh-my-cpa.db'),'SQLite format 3\\0fixture');
+  process.exit(fixture.composeExit ?? 99);
+}
 else process.exit(98);
 `, { mode: 0o700 });
   return {
+    root,
     run: (command) => spawnSync(process.execPath, [path.join(root, 'scripts/local-gateway.mjs'), command, '--json'], { encoding: 'utf8', env: { ...process.env, PATH: `${path.join(root, 'bin')}:${process.env.PATH}` } }),
     commands: () => readFileSync(path.join(root, 'commands.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)),
   };
@@ -132,11 +155,11 @@ else process.exit(98);
 
 test('start, stop, status and check refuse a different checkout before any compose command', () => {
   for (const command of ['start', 'stop', 'status', 'check']) {
-    for (const options of [{ foreign: true }, { foreignMounts: true }]) {
+    for (const options of [{ foreign: true }, { foreignMounts: true }, { overlap: true }]) {
       const fixture = dockerFixture(options);
       const result = fixture.run(command);
       assert.equal(result.status, 1, command);
-      assert.match(JSON.parse(result.stderr).error, /another checkout|foreign state mounts/);
+      assert.match(JSON.parse(result.stderr).error, /another checkout|foreign state mounts|unexpected state mounts/);
       assert.equal(fixture.commands().some((args) => args[0] === 'compose'), false);
     }
   }
@@ -150,6 +173,35 @@ test('status distinguishes absent containers from Docker daemon or permission er
   assert.equal(unavailable.status, 1);
   assert.equal(JSON.parse(unavailable.stderr).ok, false);
   assert.match(JSON.parse(unavailable.stderr).error, /Docker command failed/);
+});
+
+test('a failed startup records its data-creation attempt before Compose and refuses lost data on retry', () => {
+  const fixture = dockerFixture({ createDatabase: true });
+  const first = fixture.run('start');
+  assert.equal(first.status, 1);
+  assert.match(JSON.parse(first.stderr).error, /Docker command failed/);
+  assert.equal(JSON.parse(readFileSync(path.join(fixture.root, '.local/initialized'), 'utf8')).startAttempted, true);
+  const database = path.join(fixture.root, '.local/omc/oh-my-cpa.db');
+  assert.equal(existsSync(database), true);
+  rmSync(database);
+  const second = fixture.run('start');
+  assert.equal(second.status, 1);
+  assert.match(JSON.parse(second.stderr).error, /Previously initialized or attempted panel database/);
+  assert.equal(fixture.commands().filter((args) => args[0] === 'compose').length, 1);
+  assert.equal(existsSync(database), false);
+});
+
+test('stop reaches Compose for an owned stack after losing its initialized database', () => {
+  const fixture = dockerFixture({ composeExit: 0 });
+  const database = path.join(fixture.root, '.local/omc/oh-my-cpa.db');
+  writeFileSync(database, 'SQLite format 3\0fixture');
+  setupState(fixture.root);
+  rmSync(database);
+  const result = fixture.run('stop');
+  assert.equal(result.status, 0);
+  assert.equal(JSON.parse(result.stdout).stopped, true);
+  assert.equal(fixture.commands().filter((args) => args[0] === 'compose' && args.at(-1) === 'stop').length, 1);
+  assert.equal(existsSync(database), false);
 });
 
 async function server(handler) {
