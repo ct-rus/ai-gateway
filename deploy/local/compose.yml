@@ -1,0 +1,69 @@
+services:
+  cpa:
+    image: eceasy/cli-proxy-api:v8.0.62@sha256:c3384886597346937da7d3697150895e0c91ee563172a6053e057d3a1ba9e79c
+    env_file:
+      - ../../.local/cpa.env
+    environment:
+      TZ: UTC
+    ports:
+      - "127.0.0.1:28317:8317"
+    volumes:
+      - ../../.local/cpa/config.yaml:/CLIProxyAPI/config.yaml
+      - ../../.local/cpa/auth:/root/.cli-proxy-api
+      - ../../.local/cpa/logs:/CLIProxyAPI/logs
+      - ../../.local/cpa/plugins:/CLIProxyAPI/plugins
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8317 && printf 'GET /healthz HTTP/1.0\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q ' 200 '"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - gateway
+
+  oh-my-cpa:
+    image: wiziscool/oh-my-cpa:v0.3.26@sha256:dcce7b8cde4204619a26fb9c21f9807c54fb54085e80465f3ecb2d1b7225d27d
+    user: "${LOCAL_UID:?run setup}:${LOCAL_GID:?run setup}"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      cpa:
+        condition: service_healthy
+    env_file:
+      - ../../.local/omc.env
+    environment:
+      TZ: UTC
+      OMCPA_DATA_DIR: /data
+      OMCPA_CPA_BASE_URL: http://cpa:8317
+      OMCPA_PUBLIC_URL: http://127.0.0.1:28318
+      OMCPA_USAGE_INGEST_MODE: auto
+      OMCPA_UPDATER_ENABLED: "false"
+      OMCPA_UPDATE_CHECK_ENABLED: "false"
+      OMCPA_UPDATE_CHECK_ON_PAGE_LOAD: "false"
+    ports:
+      - "127.0.0.1:28318:8080"
+    volumes:
+      - ../../.local/omc:/data
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - gateway
+
+networks:
+  gateway:
+    ipam:
+      config:
+        - subnet: 10.254.83.0/28
