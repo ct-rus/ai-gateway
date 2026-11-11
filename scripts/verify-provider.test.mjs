@@ -27,7 +27,7 @@ async function fixture(change = {}) {
     const messages = [ { role: 'assistant', tool_calls: [call] }, { role: 'assistant', content: '42' }, { role: 'assistant', content: '{"ok":true,"result":42}' } ];
     if (change.message && n === change.at) messages[n - 1] = change.message;
     if (change.invalid && n === change.at) { res.end('{'); return; }
-    res.end(JSON.stringify({ choices: [{ message: messages[n - 1] }] }));
+    res.end(JSON.stringify({ choices: [{ message: messages[n - 1], finish_reason: change.at === n && change.finishReason !== undefined ? change.finishReason : (n === 1 ? 'tool_calls' : 'stop') }] }));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   return { base: `http://127.0.0.1:${server.address().port}`, requests, close: () => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }) };
@@ -85,4 +85,11 @@ test('live refusal, private input and exclusive receipt protect canaries', async
     const cli = spawnSync(process.execPath, ['scripts/verify-provider.mjs', '--input', input, '--receipt', target], { encoding: 'utf8' });
     assert.notEqual(cli.status, 0); assert.doesNotMatch(cli.stdout + cli.stderr, /synthetic-private-canary/);
   } finally { await f.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('provider rejects unsuccessful finish reasons at every turn without further requests', async () => {
+  for (const at of [1, 2, 3]) for (const finishReason of ['length', 'error', 'content_filter', null, at === 1 ? 'stop' : 'tool_calls']) {
+    const calls = await run({ at, finishReason }, at === 3 ? 'schema' : 'tool');
+    assert.equal(calls.filter((r) => r.path === '/v1/chat/completions').length, at);
+  }
 });

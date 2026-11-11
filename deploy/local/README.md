@@ -146,9 +146,15 @@ Receipts contain bounded metadata, not credentials, prompts, answers or cookies.
 The provider checks missing and wrong inference keys and the management 404 on
 that same inference boundary; public panel and direct-control boundaries, panel
 sessions and the usage collector require separate checks from their appropriate
-network boundaries. The provider sends three inference requests without retries.
-The CRM check sends one ask and logs out even when a later check fails. If login
-or logout loses its response, session state can be ambiguous and needs manual
+network boundaries. The provider requires `tool_calls` for the tool turn and
+`stop` for the final and JSON turns; failed or truncated responses stop the sequence without retries.
+The CRM check validates the observed version 4 Copilot response vocabulary,
+including historic destinations and message envelopes. It requires a version 4
+status with a configured 1–90 second deadline; the ask timeout adds five seconds
+for the HTTP response. A changed CRM contract needs this check reviewed before use.
+The CRM check sends one ask and logs out even when a later check fails, including
+a failed login body after a session cookie was observed. If login or logout
+loses its response, session state can be ambiguous and needs manual
 investigation; an ask with a lost response is never replayed. The CRM command
 returns a nonzero exit with `httpWorkflow: passed` and `traceNotVerified: true`
 when its HTTP checks pass: HTTP history does not prove a model/tool cycle. An

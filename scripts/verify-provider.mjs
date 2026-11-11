@@ -35,9 +35,10 @@ export function options(args) {
   check(args.length === 5 && args[0] === '--live' && args[1] === '--input' && args[3] === '--receipt' && args[2] && args[4], 'usage');
   return { input: args[2], receipt: args[4] };
 }
-export async function request(base, route, { method = 'GET', headers = {}, body, timeout = 20000 } = {}) {
+export async function request(base, route, { method = 'GET', headers = {}, body, timeout = 20000, onHeaders } = {}) {
   try {
     const response = await fetch(`${base}${route}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), redirect: 'manual', signal: AbortSignal.timeout(timeout) });
+    onHeaders?.(response.headers);
     const reader = response.body?.getReader(); let size = 0; const chunks = [];
     if (reader) for (;;) { const { done, value } = await reader.read(); if (done) break; size += value.length; if (size > 262144) { await reader.cancel(); throw new CheckError('response_size'); } chunks.push(value); }
     return { status: response.status, headers: response.headers, text: Buffer.concat(chunks).toString('utf8') };
@@ -64,7 +65,7 @@ export async function verifyProvider({ base, client, model, live, timeout = 2000
   const messages = [{ role: 'user', content: 'Call add_numbers with a=17 and b=25, then reply with only the numeric result, without any other text.' }];
   const first = await send({ model, messages, tools, tool_choice: 'auto' });
   const assistant = first?.choices?.[0]?.message, calls = assistant?.tool_calls;
-  check(assistant?.role === 'assistant' && Array.isArray(calls) && calls.length === 1, 'tool');
+  check(first?.choices?.[0]?.finish_reason === 'tool_calls' && assistant?.role === 'assistant' && Array.isArray(calls) && calls.length === 1, 'tool');
   const call = calls[0];
   check(call?.type === 'function' && call.function?.name === 'add_numbers' && typeof call.id === 'string' && call.id.length > 0 && call.id.length <= 500 && typeof call.function.arguments === 'string', 'tool');
   let args; try { args = JSON.parse(call.function.arguments); } catch { throw new CheckError('tool'); }
@@ -72,10 +73,10 @@ export async function verifyProvider({ base, client, model, live, timeout = 2000
   const result = args.a + args.b;
   const second = await send({ model, messages: [...messages, assistant, { role: 'tool', tool_call_id: call.id, content: JSON.stringify({ result }) }], tools, tool_choice: 'none' });
   const final = second?.choices?.[0]?.message;
-  check(final?.role === 'assistant' && typeof final.content === 'string' && final.content.trim() === String(result) && (final.tool_calls === undefined || Array.isArray(final.tool_calls) && final.tool_calls.length === 0), 'tool');
+  check(second?.choices?.[0]?.finish_reason === 'stop' && final?.role === 'assistant' && typeof final.content === 'string' && final.content.trim() === String(result) && (final.tool_calls === undefined || Array.isArray(final.tool_calls) && final.tool_calls.length === 0), 'tool');
   const structured = await send({ model, messages: [{ role: 'user', content: 'Return exactly this JSON object: {"ok":true,"result":42}' }], response_format: { type: 'json_object' } });
   const message = structured?.choices?.[0]?.message;
-  check(message?.role === 'assistant' && typeof message.content === 'string' && (message.tool_calls === undefined || Array.isArray(message.tool_calls) && message.tool_calls.length === 0), 'schema');
+  check(structured?.choices?.[0]?.finish_reason === 'stop' && message?.role === 'assistant' && typeof message.content === 'string' && (message.tool_calls === undefined || Array.isArray(message.tool_calls) && message.tool_calls.length === 0), 'schema');
   let value; try { value = JSON.parse(message.content); } catch { throw new CheckError('schema'); }
   check(keys(value, 'ok,result') && value.ok === true && value.result === result, 'schema');
   return { model, modelCount: models.data.length, inferenceBoundary: 'passed', toolCycle: 'passed', structuredJson: 'passed' };
