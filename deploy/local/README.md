@@ -118,3 +118,48 @@ from **System Information → Database → Manage backups**, but that export doe
 not include CPA config, auth files or deployment keys. See
 [`docs/ops/sqlite-operations.md`](../../docs/ops/sqlite-operations.md) for
 online backup and restore details.
+
+## Later Dev acceptance checks
+
+These separate checks are for the planned Dev deployment, not the local stack.
+They are opt-in and make real model requests; use them only after the inference
+route and CRM activation have been independently accepted and the operator has
+approved paid calls. The provider command must run from the approved inference
+network; its fixed origin is `http://ct-ai-inference:8317`. The CRM command is
+fixed to `https://crm-dev.ctcrm.net`. Neither accepts an arbitrary CLI origin.
+
+Place each input in an absolute, owner-only regular JSON file (mode 0600, one
+link) outside the repository. The provider input has exactly `client` (inference
+bearer key) and `model` (the exact selected model ID). The CRM input has exactly
+`email`, `password`, `role` (the expected CRM role ID) and `route` (the expected
+first route, for example `openai:gpt-6.1-sol`). Do not put credentials in command
+arguments. Choose a new absolute receipt path in an owner-only directory; an
+existing file is never replaced. For example, with private paths already created:
+
+```sh
+node scripts/verify-provider.mjs --live --input /private/provider.json --receipt /private/provider-receipt.json
+node scripts/verify-crm.mjs --live --input /private/crm.json --receipt /private/crm-receipt.json
+node --test scripts/verify-provider.test.mjs scripts/verify-crm.test.mjs
+```
+
+Receipts contain bounded metadata, not credentials, prompts, answers or cookies.
+The provider checks missing and wrong inference keys and the management 404 on
+that same inference boundary; public panel and direct-control boundaries, panel
+sessions and the usage collector require separate checks from their appropriate
+network boundaries. The provider requires `tool_calls` for the tool turn and
+`stop` for the final and JSON turns; failed or truncated responses stop the sequence without retries.
+The CRM check validates the observed version 4 Copilot response vocabulary,
+including historic destinations and message envelopes. It requires a version 4
+status with a configured 1–90 second deadline; the ask timeout adds five seconds
+for the HTTP response. A changed CRM contract needs this check reviewed before use.
+The CRM check sends one ask and logs out even when a later check fails, including
+a failed login body after a session cookie was observed. If login or logout
+loses its response, session state can be ambiguous and needs manual
+investigation; an ask with a lost response is never replayed. The CRM command
+returns a nonzero exit with `httpWorkflow: passed` and `traceNotVerified: true`
+when its HTTP checks pass: HTTP history does not prove a model/tool cycle. An
+independently reviewed CRM change must include the ask request ID in the same
+`copilotAsk` trace (and validate read/completion evidence) before exact per-ask
+trace correlation and final tool-cycle acceptance can be claimed. The currently
+available user-and-time trace is insufficient. These synthetic tests are not
+live acceptance evidence.
