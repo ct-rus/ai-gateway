@@ -47,6 +47,30 @@ signs in with CPA's management key.
 > [!TIP]
 > **[Try the Live Demo](https://omc-demo.junze.dev)**
 
+## Cointelegraph RU deployment
+
+The Cointelegraph RU gateway uses CLIProxyAPI with the Oh My CPA console at
+https://ai.ctcrm.net. The console is behind Hello Screen and also uses CPA's
+management key for sign-in. The [infrastructure deployment and operations
+guide](https://github.com/ct-rus/infrastructure/blob/main/ansible/docs/AI-GATEWAY.md)
+and [portal runbook](https://github.com/ct-rus/infrastructure/blob/main/ansible/docs/AI-GATEWAY-PORTAL.md)
+describe this deployment and include historical preparation sections; check the
+status of each procedure before use. The generic install commands below create a
+separate installation and are not an update procedure for the existing gateway.
+
+The existing provider access depends on the previous owner's subscription, which
+lasts until 5 December 2026. The new owner needs their own compatible provider
+access before then to maintain service. Confirm the provider's authentication
+method and model compatibility before changing the configuration; provider
+credentials, CPA client keys, and the management key serve different purposes.
+Keep credentials private. The service and provider configuration have not been
+rechecked on the server as part of this documentation update.
+
+The earlier [cpamp repository](https://github.com/ct-rus/ai-gateway-cpamp-archive)
+is archived. The generic reference to running another management panel alongside
+OMC in [the install guide](docs/install.md#other-management-panels)
+describes a possible setup, not the Cointelegraph RU deployment.
+
 ## Screenshots
 
 <table>

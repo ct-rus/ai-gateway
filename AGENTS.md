@@ -104,7 +104,7 @@ To keep local feedback and CI fast, follow the 3-tier testing pyramid in [Testin
 - `pnpm test:fast`: Fast local verification (`pnpm type-check && pnpm test:logic && go test -short ./...`). Runs in seconds without building the binary or launching a browser.
 - `pnpm test:frontend`: Runs all Vitest `logic` and `components` suites (`~20s`). For targeted iteration, run `pnpm exec vitest run --config web/vitest.config.ts <file>`.
 - `pnpm verify:browser:smoke`: Builds the embedded SPA + Go binary and runs the fast end-to-end Chromium smoke check.
-- `pnpm verify`: Runs `test:fast`, `test:components`, and `verify:build` (`type-check`, `build`, `check:bundle`).
+- `pnpm verify`: Runs toolchain, static, documentation-link and worktree secret checks. Use `pnpm verify:build` for the production build and bundle check, or `pnpm verify:full` for those checks plus browser acceptance.
 - Agents commit or push only when explicitly asked by the user.
 
 ## Code style & documentation hygiene

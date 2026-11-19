@@ -11,7 +11,8 @@ and shipped-artifact checks strict.
 | --- | --- |
 | Routine edit, fast feedback | `pnpm test:fast` (`pnpm type-check && pnpm test:logic && go test -short ./...`) |
 | Frontend behavior while editing | `pnpm test:frontend`, or `pnpm exec vitest run --config web/vitest.config.ts <file>` |
-| Full local static + build check | `pnpm verify` (`pnpm test:fast && pnpm test:components && pnpm verify:build`) |
+| Local toolchain, static, documentation and secret checks | `pnpm verify` |
+| Production build and bundle check | `pnpm verify:build` |
 | Embedded SPA + Go binary browser smoke | `pnpm verify:browser:smoke` (or `pnpm verify:browser` for the full suite) |
 | Complete pre-release / CI gate | `pnpm verify:full` |
 | A failing CI lane | Run that lane first; do not repeat passing, unchanged checks |
@@ -53,7 +54,7 @@ retain diagnostics under `tmp/browser-acceptance-failure/`.
 The GitHub Actions workflows (`.github/workflows/ci.yml` and `.github/workflows/release.yml`)
 are the executable source of truth:
 
-- **Pull requests**: Path-filtered lanes (`go`, `frontend`, `static`, `browser`) run only when relevant files change, with built-artifact `browser` smoke (`pnpm verify:browser:smoke`) when application code is affected.
+- **Pull requests**: Static Go, frontend and browser lanes run on PRs targeting `main`, including documentation-only changes. Browser acceptance uses `pnpm verify:browser:smoke` unless the PR has the `full-ci` label.
 - **Main, nightly, manual, or `full-ci` label**: Full static and unit suites plus full built-artifact browser acceptance (`pnpm verify:browser`).
 - **Weekly/manual maintenance**: Go race detector, bounded fuzzing, dependency advisories, and host-native runtime checks.
 - **Release**: Complete static and browser verification before packaging, immutable tag/commit identity, Ed25519-signed manifests, container/native smoke tests, and promotion gates. See [Releasing](releasing.md).
