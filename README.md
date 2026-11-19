@@ -66,60 +66,13 @@ Use this index to find deployment instructions, product guides and project refer
 | [Chinese README](README.zh-CN.md) | You want the Chinese product introduction. |
 | [i18n guide](web/src/i18n/README.md) · [Style](web/src/i18n/STYLE.md) · [Glossary](web/src/i18n/GLOSSARY.md) | You work on translations. |
 | [Brand storage](web/src/assets/brand/storage/README.md) | You work with the stored brand assets. |
-| [Release notes](#release-notes-index) | You need the history of a specific product version. |
+| [Release notes](docs/releases/) | You need the history of a specific product version. |
 | [Infrastructure: AI gateway](https://github.com/ct-rus/infrastructure/blob/main/ansible/docs/AI-GATEWAY.md) · [Portal runbook](https://github.com/ct-rus/infrastructure/blob/main/ansible/docs/AI-GATEWAY-PORTAL.md) | You need CT deployment, portal or rollback procedures. |
 | [Hello Screen](https://github.com/ct-rus/hello-screen) · [RU CRM](https://github.com/ct-rus/internal-crm) | You work on portal access or the CRM integration. |
 
-### Release notes index
+### Release notes
 
-<details>
-<summary>Choose a product version</summary>
-
-| Document | Read this when… |
-| --- | --- |
-| [v0.1.1](docs/releases/v0.1.1.md) | You need the v0.1.1 release history. |
-| [v0.1.2](docs/releases/v0.1.2.md) | You need the v0.1.2 release history. |
-| [v0.1.3](docs/releases/v0.1.3.md) | You need the v0.1.3 release history. |
-| [v0.1.4](docs/releases/v0.1.4.md) | You need the v0.1.4 release history. |
-| [v0.2.0](docs/releases/v0.2.0.md) | You need the v0.2.0 release history. |
-| [v0.2.1](docs/releases/v0.2.1.md) | You need the v0.2.1 release history. |
-| [v0.2.2](docs/releases/v0.2.2.md) | You need the v0.2.2 release history. |
-| [v0.2.3](docs/releases/v0.2.3.md) | You need the v0.2.3 release history. |
-| [v0.2.4](docs/releases/v0.2.4.md) | You need the v0.2.4 release history. |
-| [v0.2.5](docs/releases/v0.2.5.md) | You need the v0.2.5 release history. |
-| [v0.2.6](docs/releases/v0.2.6.md) | You need the v0.2.6 release history. |
-| [v0.2.7](docs/releases/v0.2.7.md) | You need the v0.2.7 release history. |
-| [v0.2.8](docs/releases/v0.2.8.md) | You need the v0.2.8 release history. |
-| [v0.2.9](docs/releases/v0.2.9.md) | You need the v0.2.9 release history. |
-| [v0.3.0](docs/releases/v0.3.0.md) | You need the v0.3.0 release history. |
-| [v0.3.1](docs/releases/v0.3.1.md) | You need the v0.3.1 release history. |
-| [v0.3.2](docs/releases/v0.3.2.md) | You need the v0.3.2 release history. |
-| [v0.3.3](docs/releases/v0.3.3.md) | You need the v0.3.3 release history. |
-| [v0.3.4](docs/releases/v0.3.4.md) | You need the v0.3.4 release history. |
-| [v0.3.5](docs/releases/v0.3.5.md) | You need the v0.3.5 release history. |
-| [v0.3.6](docs/releases/v0.3.6.md) | You need the v0.3.6 release history. |
-| [v0.3.7](docs/releases/v0.3.7.md) | You need the v0.3.7 release history. |
-| [v0.3.8](docs/releases/v0.3.8.md) | You need the v0.3.8 release history. |
-| [v0.3.9](docs/releases/v0.3.9.md) | You need the v0.3.9 release history. |
-| [v0.3.10](docs/releases/v0.3.10.md) | You need the v0.3.10 release history. |
-| [v0.3.11](docs/releases/v0.3.11.md) | You need the v0.3.11 release history. |
-| [v0.3.12](docs/releases/v0.3.12.md) | You need the v0.3.12 release history. |
-| [v0.3.13](docs/releases/v0.3.13.md) | You need the v0.3.13 release history. |
-| [v0.3.14](docs/releases/v0.3.14.md) | You need the v0.3.14 release history. |
-| [v0.3.15](docs/releases/v0.3.15.md) | You need the v0.3.15 release history. |
-| [v0.3.16](docs/releases/v0.3.16.md) | You need the v0.3.16 release history. |
-| [v0.3.17](docs/releases/v0.3.17.md) | You need the v0.3.17 release history. |
-| [v0.3.18](docs/releases/v0.3.18.md) | You need the v0.3.18 release history. |
-| [v0.3.19](docs/releases/v0.3.19.md) | You need the v0.3.19 release history. |
-| [v0.3.20](docs/releases/v0.3.20.md) | You need the v0.3.20 release history. |
-| [v0.3.21](docs/releases/v0.3.21.md) | You need the v0.3.21 release history. |
-| [v0.3.22](docs/releases/v0.3.22.md) | You need the v0.3.22 release history. |
-| [v0.3.23](docs/releases/v0.3.23.md) | You need the v0.3.23 release history. |
-| [v0.3.24](docs/releases/v0.3.24.md) | You need the v0.3.24 release history. |
-| [v0.3.25](docs/releases/v0.3.25.md) | You need the v0.3.25 release history. |
-| [v0.3.26](docs/releases/v0.3.26.md) | You need the v0.3.26 release history. |
-
-</details>
+Per-version notes are in [docs/releases/](docs/releases/).
 
 ## Screenshots
 
