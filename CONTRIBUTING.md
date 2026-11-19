@@ -39,9 +39,10 @@ record, mirrored catalog or synchronized specification.
 ## Verify a change
 
 Start with `pnpm test:fast` (`pnpm type-check && pnpm test:logic && go test -short ./...`).
-`pnpm test:frontend` runs all frontend logic and component suites, `pnpm verify` adds the
-production build and bundle check, and `pnpm verify:browser:smoke` exercises the embedded
-SPA and Go binary in a browser. Additional checks depend on the risk: see [Testing](docs/testing.md),
+`pnpm test:frontend` runs all frontend logic and component suites. `pnpm verify` runs
+toolchain, static, documentation-link and worktree secret checks; `pnpm verify:build`
+adds the production build and bundle check. `pnpm verify:browser:smoke` exercises the
+embedded SPA and Go binary in a browser. Additional checks depend on the risk: see [Testing](docs/testing.md),
 including shipped-build and release verification. Do not substitute a dev-server
 pass for testing the embedded application.
 
