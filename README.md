@@ -47,29 +47,79 @@ signs in with CPA's management key.
 > [!TIP]
 > **[Try the Live Demo](https://omc-demo.junze.dev)**
 
-## Cointelegraph RU deployment
+## Documentation
 
-The Cointelegraph RU gateway uses CLIProxyAPI with the Oh My CPA console at
-https://ai.ctcrm.net. The console is behind Hello Screen and also uses CPA's
-management key for sign-in. The [infrastructure deployment and operations
-guide](https://github.com/ct-rus/infrastructure/blob/main/ansible/docs/AI-GATEWAY.md)
-and [portal runbook](https://github.com/ct-rus/infrastructure/blob/main/ansible/docs/AI-GATEWAY-PORTAL.md)
-describe this deployment and include historical preparation sections; check the
-status of each procedure before use. The generic install commands below create a
-separate installation and are not an update procedure for the existing gateway.
+Use this index to find deployment instructions, product guides and project references.
 
-The existing provider access depends on the previous owner's subscription, which
-lasts until 5 December 2026. The new owner needs their own compatible provider
-access before then to maintain service. Confirm the provider's authentication
-method and model compatibility before changing the configuration; provider
-credentials, CPA client keys, and the management key serve different purposes.
-Keep credentials private. The service and provider configuration have not been
-rechecked on the server as part of this documentation update.
+| Document | Read this when… |
+| --- | --- |
+| [README](README.md) | You need an overview of Oh My CPA and its documentation. |
+| [CT deployment](docs/ct-deployment.md) | You operate the gateway at ai.ctcrm.net or arrange provider access. |
+| [Install](docs/install.md) · [Install for agents](docs/install-for-agents.md) | You set up a separate installation or guide an agent through one. |
+| [Operations](docs/operations.md) · [SQLite operations](docs/ops/sqlite-operations.md) | You operate the product or need database backup, recovery or key procedures. |
+| [Agent capabilities](docs/agent-capabilities.md) · [CPA compatibility](docs/cpa-v8-compat.md) · [Pricing](docs/pricing.md) | You need the agent/MCP, CPA configuration or pricing contracts. |
+| [Architecture](docs/architecture.md) · [Domain language](CONTEXT.md) · [Design](docs/design.md) | You need product boundaries, terminology or UI conventions. |
+| [Contributing](CONTRIBUTING.md) · [Testing](docs/testing.md) · [Agent instructions](AGENTS.md) · [CLAUDE.md](CLAUDE.md) | You develop or verify changes; CLAUDE.md points to AGENTS.md. |
+| [Releasing](docs/releasing.md) · [Cloudflare demo](docs/ops/cloudflare-demo.md) | You package a release or operate the public demo. |
+| [Pull request template](.github/pull_request_template.md) | You prepare a pull request. |
+| [Security](SECURITY.md) | You need to report a vulnerability. |
+| [Chinese README](README.zh-CN.md) | You want the Chinese product introduction. |
+| [i18n guide](web/src/i18n/README.md) · [Style](web/src/i18n/STYLE.md) · [Glossary](web/src/i18n/GLOSSARY.md) | You work on translations. |
+| [Brand storage](web/src/assets/brand/storage/README.md) | You work with the stored brand assets. |
+| [Release notes](#release-notes-index) | You need the history of a specific product version. |
+| [Infrastructure: AI gateway](https://github.com/ct-rus/infrastructure/blob/main/ansible/docs/AI-GATEWAY.md) · [Portal runbook](https://github.com/ct-rus/infrastructure/blob/main/ansible/docs/AI-GATEWAY-PORTAL.md) | You need CT deployment, portal or rollback procedures. |
+| [Hello Screen](https://github.com/ct-rus/hello-screen) · [RU CRM](https://github.com/ct-rus/internal-crm) | You work on portal access or the CRM integration. |
 
-The earlier [cpamp repository](https://github.com/ct-rus/ai-gateway-cpamp-archive)
-is archived. The generic reference to running another management panel alongside
-OMC in [the install guide](docs/install.md#other-management-panels)
-describes a possible setup, not the Cointelegraph RU deployment.
+### Release notes index
+
+<details>
+<summary>Choose a product version</summary>
+
+| Document | Read this when… |
+| --- | --- |
+| [v0.1.1](docs/releases/v0.1.1.md) | You need the v0.1.1 release history. |
+| [v0.1.2](docs/releases/v0.1.2.md) | You need the v0.1.2 release history. |
+| [v0.1.3](docs/releases/v0.1.3.md) | You need the v0.1.3 release history. |
+| [v0.1.4](docs/releases/v0.1.4.md) | You need the v0.1.4 release history. |
+| [v0.2.0](docs/releases/v0.2.0.md) | You need the v0.2.0 release history. |
+| [v0.2.1](docs/releases/v0.2.1.md) | You need the v0.2.1 release history. |
+| [v0.2.2](docs/releases/v0.2.2.md) | You need the v0.2.2 release history. |
+| [v0.2.3](docs/releases/v0.2.3.md) | You need the v0.2.3 release history. |
+| [v0.2.4](docs/releases/v0.2.4.md) | You need the v0.2.4 release history. |
+| [v0.2.5](docs/releases/v0.2.5.md) | You need the v0.2.5 release history. |
+| [v0.2.6](docs/releases/v0.2.6.md) | You need the v0.2.6 release history. |
+| [v0.2.7](docs/releases/v0.2.7.md) | You need the v0.2.7 release history. |
+| [v0.2.8](docs/releases/v0.2.8.md) | You need the v0.2.8 release history. |
+| [v0.2.9](docs/releases/v0.2.9.md) | You need the v0.2.9 release history. |
+| [v0.3.0](docs/releases/v0.3.0.md) | You need the v0.3.0 release history. |
+| [v0.3.1](docs/releases/v0.3.1.md) | You need the v0.3.1 release history. |
+| [v0.3.2](docs/releases/v0.3.2.md) | You need the v0.3.2 release history. |
+| [v0.3.3](docs/releases/v0.3.3.md) | You need the v0.3.3 release history. |
+| [v0.3.4](docs/releases/v0.3.4.md) | You need the v0.3.4 release history. |
+| [v0.3.5](docs/releases/v0.3.5.md) | You need the v0.3.5 release history. |
+| [v0.3.6](docs/releases/v0.3.6.md) | You need the v0.3.6 release history. |
+| [v0.3.7](docs/releases/v0.3.7.md) | You need the v0.3.7 release history. |
+| [v0.3.8](docs/releases/v0.3.8.md) | You need the v0.3.8 release history. |
+| [v0.3.9](docs/releases/v0.3.9.md) | You need the v0.3.9 release history. |
+| [v0.3.10](docs/releases/v0.3.10.md) | You need the v0.3.10 release history. |
+| [v0.3.11](docs/releases/v0.3.11.md) | You need the v0.3.11 release history. |
+| [v0.3.12](docs/releases/v0.3.12.md) | You need the v0.3.12 release history. |
+| [v0.3.13](docs/releases/v0.3.13.md) | You need the v0.3.13 release history. |
+| [v0.3.14](docs/releases/v0.3.14.md) | You need the v0.3.14 release history. |
+| [v0.3.15](docs/releases/v0.3.15.md) | You need the v0.3.15 release history. |
+| [v0.3.16](docs/releases/v0.3.16.md) | You need the v0.3.16 release history. |
+| [v0.3.17](docs/releases/v0.3.17.md) | You need the v0.3.17 release history. |
+| [v0.3.18](docs/releases/v0.3.18.md) | You need the v0.3.18 release history. |
+| [v0.3.19](docs/releases/v0.3.19.md) | You need the v0.3.19 release history. |
+| [v0.3.20](docs/releases/v0.3.20.md) | You need the v0.3.20 release history. |
+| [v0.3.21](docs/releases/v0.3.21.md) | You need the v0.3.21 release history. |
+| [v0.3.22](docs/releases/v0.3.22.md) | You need the v0.3.22 release history. |
+| [v0.3.23](docs/releases/v0.3.23.md) | You need the v0.3.23 release history. |
+| [v0.3.24](docs/releases/v0.3.24.md) | You need the v0.3.24 release history. |
+| [v0.3.25](docs/releases/v0.3.25.md) | You need the v0.3.25 release history. |
+| [v0.3.26](docs/releases/v0.3.26.md) | You need the v0.3.26 release history. |
+
+</details>
 
 ## Screenshots
 
@@ -329,32 +379,6 @@ Browser ──▶ Direct listener / existing HTTPS ingress ──▶ Oh My CPA (
 - **Allowlisted facade**: ordinary console APIs project safe DTOs; trusted plugin pages use the bounded native contract. Arbitrary target URLs remain refused.
 
 [`docs/architecture.md`](docs/architecture.md) has the module map, data flows and invariants.
-
-## Documentation
-
-**Using OMC**
-
-| Document | Contents |
-| --- | --- |
-| [`docs/install.md`](docs/install.md) | Installation, verification, upgrades, troubleshooting |
-| [`docs/install-for-agents.md`](docs/install-for-agents.md) | The same install, as steps for a coding agent |
-| [`docs/operations.md`](docs/operations.md) | Settings reference and operational notes |
-| [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) | Backup, restore and master-key runbook |
-| [`docs/agent-capabilities.md`](docs/agent-capabilities.md) | Agent capability contract and the MCP bridge |
-| [`docs/cpa-v8-compat.md`](docs/cpa-v8-compat.md) | CPA v8 baseline and configuration relocation |
-| [`docs/pricing.md`](docs/pricing.md) | Price books, billing tiers and locked cost snapshots |
-
-**Developing OMC**
-
-| Document | Contents |
-| --- | --- |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Development setup and the verification workflow |
-| [`docs/testing.md`](docs/testing.md) | Test layers, local feedback and CI verification |
-| [`AGENTS.md`](AGENTS.md) | The contract coding agents follow in this repository |
-| [`docs/architecture.md`](docs/architecture.md) | Module boundaries, data flows and invariants |
-| [`CONTEXT.md`](CONTEXT.md) · [`docs/design.md`](docs/design.md) | Domain vocabulary · visual system |
-| [`docs/releasing.md`](docs/releasing.md) | Tag-triggered Docker Hub images, native archives and GitHub releases |
-| [`docs/ops/cloudflare-demo.md`](docs/ops/cloudflare-demo.md) | How the public demo is deployed |
 
 ## Contributing
 
