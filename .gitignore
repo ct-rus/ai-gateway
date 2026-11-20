@@ -37,6 +37,7 @@ tmp/
 tmp-*
 
 # Runtime data
+/.local/
 /data/
 *.db
 *.db-shm

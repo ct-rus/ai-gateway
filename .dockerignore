@@ -26,4 +26,6 @@
 **/*.tsbuildinfo
 **/.env
 **/.env.*
+.local/
+.local/**
 web/public/lobe-icons
